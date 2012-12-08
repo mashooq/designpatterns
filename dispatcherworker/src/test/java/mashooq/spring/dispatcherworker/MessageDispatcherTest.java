@@ -8,10 +8,13 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.integration.MessageChannel;
 import org.springframework.integration.channel.QueueChannel;
+import org.springframework.integration.endpoint.PollingConsumer;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
 import static org.springframework.integration.support.MessageBuilder.withPayload;
 
 @ContextConfiguration
@@ -26,11 +29,15 @@ public class MessageDispatcherTest implements ApplicationContextAware {
     @Test
 	public void testCat() throws InterruptedException {
 		inputChannel.send(withPayload(createMessage("id-1", 1)).build());
+		inputChannel.send(withPayload(createMessage("id-1", 5)).build());
 		inputChannel.send(withPayload(createMessage("id-2", 1)).build());
 		inputChannel.send(withPayload(createMessage("id-1", 2)).build());
 
-        QueueChannel id1Channel = (QueueChannel) applicationContext.getBean("id-1-channel");
-        assertNotNull(id1Channel);
+        MessageDispatcher messageDispatcher = (MessageDispatcher) applicationContext.getBean("messageDispatcher");
+        assertNotNull(messageDispatcher);
+        Thread.sleep(1000);
+        assertThat(messageDispatcher.getNumberOfVersionsReceivedForMessage("id-1"), is(3));
+        assertThat(messageDispatcher.getNumberOfVersionsReceivedForMessage("id-2"), is(1));
 	}
 
     @Override

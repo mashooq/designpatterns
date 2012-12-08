@@ -11,8 +11,8 @@
 
 	<channel id="inputChannel"/>
 
-	<router input-channel="inputChannel">
-		<beans:bean class="mashooq.spring.dispatcherworker.MessageDispatcher"/>
+    <beans:bean id="messageDispatcher" class="mashooq.spring.dispatcherworker.MessageDispatcher"/>
+    <router input-channel="inputChannel" ref="messageDispatcher">
 	</router>
 
     <task:executor id="consumerPool"

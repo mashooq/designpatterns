@@ -7,6 +7,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.integration.Message;
 import org.springframework.integration.MessagingException;
 import org.springframework.integration.annotation.Router;
 import org.springframework.integration.channel.QueueChannel;
@@ -20,6 +21,7 @@ public class MessageDispatcher implements ApplicationContextAware {
     private ConcurrentHashMap<String, QueueChannel> activeChannels = new ConcurrentHashMap<String, QueueChannel>();
     private ConcurrentHashMap<String, PollingConsumer> activeConsumers = new ConcurrentHashMap<String, PollingConsumer>();
     private GenericApplicationContext applicationContext;
+    private final ConcurrentHashMap<String, Integer> receivedMessageCounter = new ConcurrentHashMap<String, Integer>();
 
     @Router
     public String dispatch(CustomMessage inputMessage) {
@@ -33,12 +35,30 @@ public class MessageDispatcher implements ApplicationContextAware {
         return channelName;
     }
 
-    private PollingConsumer createAssociatedConsumer(CustomMessage inputMessage, QueueChannel activeChannel) {
-        String consumerName = inputMessage.getId() + "-consumer";
+    public Integer getNumberOfVersionsReceivedForMessage(String messageId) {
+        Integer versionCount = receivedMessageCounter.get(messageId);
+        return versionCount == null ? 0 : versionCount;
+    }
+
+    private PollingConsumer createAssociatedConsumer(final CustomMessage inputMessage, final QueueChannel activeChannel) {
+        final String consumerName = inputMessage.getId() + "-consumer";
         PollingConsumer activeConsumer = new PollingConsumer(activeChannel, new MessageHandler() {
             @Override
-            public void handleMessage(org.springframework.integration.Message<?> message) throws MessagingException {
+            public void handleMessage(Message<?> message) throws MessagingException {
                 logger.info("Message received: " + message.getPayload());
+                maintainMessageCounter(message);
+            }
+
+            private void maintainMessageCounter(final Message<?> message) {
+                CustomMessage payload = (CustomMessage) message.getPayload();
+                synchronized (receivedMessageCounter) {
+                    Integer counter = receivedMessageCounter.get(payload.getId());
+                    if (counter == null) {
+                        receivedMessageCounter.put(payload.getId(), new Integer(1));
+                    } else {
+                        receivedMessageCounter.put(payload.getId(), new Integer(++counter));
+                    }
+                }
             }
         });
 
@@ -52,6 +72,7 @@ public class MessageDispatcher implements ApplicationContextAware {
         applicationContext.getBeanFactory().registerSingleton(consumerName, activeConsumer);
         return activeConsumer;
     }
+
 
     private QueueChannel createNewChannel(String channelName) {
         QueueChannel activeChannel = new QueueChannel();
