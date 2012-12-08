@@ -28,7 +28,7 @@ public class MessageDispatcherTest {
 
 
     @Test
-    public void testCat() throws Exception {
+    public void allVersionsOfAMessageAreProcessedByTheSameConsumer() throws Exception {
         inputChannel.send(withPayload(createMessage(ID_ONE, 1)).build());
         inputChannel.send(withPayload(createMessage(ID_ONE, 5)).build());
         inputChannel.send(withPayload(createMessage(ID_TWO, 1)).build());

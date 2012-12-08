@@ -15,7 +15,7 @@
     <router input-channel="inputChannel" ref="messageDispatcher">
 	</router>
 
-    <task:executor id="consumerPool"
+    <task:executor id="consumerExecutorPool"
                    pool-size="1-5"
                    queue-capacity="20"
                    keep-alive="120"

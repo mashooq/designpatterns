@@ -12,6 +12,7 @@ import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.core.MessageHandler;
 import org.springframework.integration.endpoint.PollingConsumer;
 
+import javax.annotation.Resource;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageDispatcher implements ApplicationContextAware {
@@ -21,6 +22,9 @@ public class MessageDispatcher implements ApplicationContextAware {
     private ConcurrentHashMap<String, QueueChannel> activeChannels = new ConcurrentHashMap<String, QueueChannel>();
     private GenericApplicationContext applicationContext;
     private final ConcurrentHashMap<String, Integer> receivedMessageCounter = new ConcurrentHashMap<String, Integer>();
+
+    @Resource(name = "consumerExecutorPool")
+    TaskExecutor consumerExecutorPool;
 
     @Router
     public String dispatch(CustomMessage inputMessage) {
@@ -52,7 +56,7 @@ public class MessageDispatcher implements ApplicationContextAware {
         activeConsumer.setBeanName(consumerName);
         activeConsumer.setAutoStartup(true);
         activeConsumer.setBeanFactory(applicationContext.getBeanFactory());
-        activeConsumer.setTaskExecutor((TaskExecutor) applicationContext.getBean("consumerPool"));
+        activeConsumer.setTaskExecutor(consumerExecutorPool);
         applicationContext.getBeanFactory().registerSingleton(consumerName, activeConsumer);
     }
 

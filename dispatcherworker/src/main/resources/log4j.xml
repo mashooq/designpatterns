@@ -20,7 +20,7 @@
 	</logger>
 
     <logger name="org.springframework.integration.channel.QueueChannel">
-        <level value="debug" />
+        <level value="warn" />
     </logger>
 
     <logger name="mashooq.spring.dispatcherworker">
