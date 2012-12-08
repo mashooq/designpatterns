@@ -18,11 +18,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MessageDispatcher implements ApplicationContextAware {
     public static final String CHANNEL_SUFFIX = "-channel";
     public static final String CONSUMER_SUFFIX = "-consumer";
+    public static final String WORKER_SUFFIX = "-worker";
 
     private ConcurrentHashMap<String, QueueChannel> activeChannels = new ConcurrentHashMap<String, QueueChannel>();
     private GenericApplicationContext applicationContext;
-    private final ConcurrentHashMap<String, CustomMessageHandler> messageConsumers =
-            new ConcurrentHashMap<String, CustomMessageHandler>();
+    private final ConcurrentHashMap<String, MessageWorker> messageWorkers =
+            new ConcurrentHashMap<String, MessageWorker>();
 
     @Resource(name = "consumerExecutorPool")
     TaskExecutor consumerExecutorPool;
@@ -34,7 +35,7 @@ public class MessageDispatcher implements ApplicationContextAware {
         synchronized (channelName.intern()) {
             if (activeChannels.get(channelName) == null) {
                 QueueChannel activeChannel = createNewChannel(channelName);
-                PollingConsumer activeConsumer = createAssociatedConsumer(inputMessage, activeChannel);
+                PollingConsumer activeConsumer = createConsumerWithWorker(inputMessage, activeChannel);
                 activeConsumer.start();
             }
         }
@@ -42,15 +43,17 @@ public class MessageDispatcher implements ApplicationContextAware {
         return channelName;
     }
 
-    public Integer getNumberOfMessagesProcessedBy(String consumer) {
-        return messageConsumers.get(consumer).numberOfMessageReceived;
+    public Integer getNumberOfMessagesProcessedBy(String worker) {
+        return messageWorkers.get(worker).numberOfMessageReceived;
     }
 
-    private PollingConsumer createAssociatedConsumer(final CustomMessage inputMessage,
+    private PollingConsumer createConsumerWithWorker(final CustomMessage inputMessage,
                                                      final QueueChannel activeChannel) {
-        final String consumerName = inputMessage.getId() + CONSUMER_SUFFIX;
+        final String workerName = inputMessage.getId() + WORKER_SUFFIX;
+        MessageWorker messageWorker = createMessageWorker(workerName);
 
-        PollingConsumer activeConsumer = createPollingConsumerFor(activeChannel, consumerName);
+        PollingConsumer activeConsumer = new PollingConsumer(activeChannel, messageWorker);
+        final String consumerName = inputMessage.getId() + CONSUMER_SUFFIX;
         startConsumingFromChannel(consumerName, activeConsumer);
 
         return activeConsumer;
@@ -64,10 +67,10 @@ public class MessageDispatcher implements ApplicationContextAware {
         applicationContext.getBeanFactory().registerSingleton(consumerName, activeConsumer);
     }
 
-    private PollingConsumer createPollingConsumerFor(final QueueChannel activeChannel, final String consumerName) {
-        final CustomMessageHandler messageHandler = new CustomMessageHandler();
-        messageConsumers.put(consumerName, messageHandler);
-        return new PollingConsumer(activeChannel, messageHandler);
+    private MessageWorker createMessageWorker(final String workerName) {
+        final MessageWorker messageWorker = new MessageWorker();
+        messageWorkers.put(workerName, messageWorker);
+        return messageWorker;
     }
 
 
@@ -85,7 +88,7 @@ public class MessageDispatcher implements ApplicationContextAware {
     }
 
 
-    class CustomMessageHandler implements MessageHandler {
+    class MessageWorker implements MessageHandler {
         private int numberOfMessageReceived = 0;
 
         @Override
