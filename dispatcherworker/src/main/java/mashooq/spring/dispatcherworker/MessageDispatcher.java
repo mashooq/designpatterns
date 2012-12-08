@@ -21,7 +21,8 @@ public class MessageDispatcher implements ApplicationContextAware {
 
     private ConcurrentHashMap<String, QueueChannel> activeChannels = new ConcurrentHashMap<String, QueueChannel>();
     private GenericApplicationContext applicationContext;
-    private final ConcurrentHashMap<String, Integer> receivedMessageCounter = new ConcurrentHashMap<String, Integer>();
+    private final ConcurrentHashMap<String, CustomMessageHandler> messageConsumers =
+            new ConcurrentHashMap<String, CustomMessageHandler>();
 
     @Resource(name = "consumerExecutorPool")
     TaskExecutor consumerExecutorPool;
@@ -29,24 +30,27 @@ public class MessageDispatcher implements ApplicationContextAware {
     @Router
     public String dispatch(CustomMessage inputMessage) {
         String channelName = inputMessage.getId() + CHANNEL_SUFFIX;
-        if (activeChannels.get(channelName) == null) {
-            QueueChannel activeChannel = createNewChannel(channelName);
-            PollingConsumer activeConsumer = createAssociatedConsumer(inputMessage, activeChannel);
-            activeConsumer.start();
+
+        synchronized (channelName.intern()) {
+            if (activeChannels.get(channelName) == null) {
+                QueueChannel activeChannel = createNewChannel(channelName);
+                PollingConsumer activeConsumer = createAssociatedConsumer(inputMessage, activeChannel);
+                activeConsumer.start();
+            }
         }
 
         return channelName;
     }
 
-    public Integer getNumberOfVersionsReceivedForMessage(String messageId) {
-        Integer versionCount = receivedMessageCounter.get(messageId);
-        return versionCount == null ? 0 : versionCount;
+    public Integer getNumberOfMessagesProcessedBy(String consumer) {
+        return messageConsumers.get(consumer).numberOfMessageReceived;
     }
 
-    private PollingConsumer createAssociatedConsumer(final CustomMessage inputMessage, final QueueChannel activeChannel) {
+    private PollingConsumer createAssociatedConsumer(final CustomMessage inputMessage,
+                                                     final QueueChannel activeChannel) {
         final String consumerName = inputMessage.getId() + CONSUMER_SUFFIX;
-        PollingConsumer activeConsumer = createPollingConsumerFor(activeChannel);
 
+        PollingConsumer activeConsumer = createPollingConsumerFor(activeChannel, consumerName);
         startConsumingFromChannel(consumerName, activeConsumer);
 
         return activeConsumer;
@@ -60,25 +64,10 @@ public class MessageDispatcher implements ApplicationContextAware {
         applicationContext.getBeanFactory().registerSingleton(consumerName, activeConsumer);
     }
 
-    private PollingConsumer createPollingConsumerFor(final QueueChannel activeChannel) {
-        return new PollingConsumer(activeChannel, new MessageHandler() {
-            @Override
-            public void handleMessage(Message<?> message) throws MessagingException {
-                maintainMessageCounter(message);
-            }
-
-            private void maintainMessageCounter(final Message<?> message) {
-                CustomMessage payload = (CustomMessage) message.getPayload();
-                synchronized (receivedMessageCounter) {
-                    Integer counter = receivedMessageCounter.get(payload.getId());
-                    if (counter == null) {
-                        receivedMessageCounter.put(payload.getId(), 1);
-                    } else {
-                        receivedMessageCounter.put(payload.getId(), ++counter);
-                    }
-                }
-            }
-        });
+    private PollingConsumer createPollingConsumerFor(final QueueChannel activeChannel, final String consumerName) {
+        final CustomMessageHandler messageHandler = new CustomMessageHandler();
+        messageConsumers.put(consumerName, messageHandler);
+        return new PollingConsumer(activeChannel, messageHandler);
     }
 
 
@@ -94,4 +83,19 @@ public class MessageDispatcher implements ApplicationContextAware {
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = (GenericApplicationContext) applicationContext;
     }
+
+
+    class CustomMessageHandler implements MessageHandler {
+        private int numberOfMessageReceived = 0;
+
+        @Override
+        public void handleMessage(Message<?> message) throws MessagingException {
+            incrementNumberOfMessagesReceivedByThisConsumer();
+        }
+
+        private void incrementNumberOfMessagesReceivedByThisConsumer() {
+            numberOfMessageReceived++;
+        }
+    }
+
 }

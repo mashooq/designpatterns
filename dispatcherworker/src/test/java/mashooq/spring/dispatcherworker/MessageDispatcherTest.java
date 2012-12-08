@@ -10,6 +10,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import static com.jayway.awaitility.Awaitility.to;
 import static com.jayway.awaitility.Awaitility.waitAtMost;
 import static com.jayway.awaitility.Duration.FIVE_SECONDS;
+import static mashooq.spring.dispatcherworker.MessageDispatcher.CONSUMER_SUFFIX;
 import static org.hamcrest.CoreMatchers.is;
 import static org.springframework.integration.support.MessageBuilder.withPayload;
 
@@ -19,6 +20,7 @@ public class MessageDispatcherTest {
 
     public static final String ID_ONE = "id-1";
     public static final String ID_TWO = "id-2";
+    public static final String ID_ONE_CONSUMER = ID_ONE + CONSUMER_SUFFIX;
     public static final String MESSAGE_PAYLOAD = "sample message payload";
     @Autowired
     MessageChannel inputChannel;
@@ -28,16 +30,16 @@ public class MessageDispatcherTest {
 
 
     @Test
-    public void allVersionsOfAMessageAreProcessedByTheSameConsumer() throws Exception {
+    public void allMessagesWithSameIdAreProcessedByTheSameConsumer() throws Exception {
         inputChannel.send(withPayload(createMessage(ID_ONE, 1)).build());
         inputChannel.send(withPayload(createMessage(ID_ONE, 5)).build());
         inputChannel.send(withPayload(createMessage(ID_TWO, 1)).build());
         inputChannel.send(withPayload(createMessage(ID_ONE, 2)).build());
 
-        final int expectedNumberOfVersions = 3;
+        final int expectedNumberOfMessages = 3;
         waitAtMost(FIVE_SECONDS).untilCall(
-                to(messageDispatcher).getNumberOfVersionsReceivedForMessage(ID_ONE),
-                is(expectedNumberOfVersions));
+                to(messageDispatcher).getNumberOfMessagesProcessedBy(ID_ONE_CONSUMER),
+                is(expectedNumberOfMessages));
     }
 
 
